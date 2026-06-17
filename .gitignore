@@ -4,6 +4,9 @@ data/
 # Data dictionary (personal reference, not for repo)
 DATA_DICTIONARY.md
 
+# Prompt file
+prompt.md
+
 # Python virtual environment
 .venv/
 venv/
