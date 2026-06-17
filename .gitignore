@@ -1,6 +1,9 @@
 # Generated data (large parquet files — regenerate with: python generate.py)
 data/
 
+# Data dictionary (personal reference, not for repo)
+DATA_DICTIONARY.md
+
 # Python virtual environment
 .venv/
 venv/
