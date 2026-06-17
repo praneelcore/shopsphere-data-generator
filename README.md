@@ -29,7 +29,7 @@ Generates **11 production-style datasets** across ~6.3 million rows by default, 
 ### 1. Install dependencies
 
 ```bash
-cd fake-company-data-generator
+cd shopsphere-data-generator
 pip install -r requirements.txt
 ```
 
@@ -161,7 +161,7 @@ SELECT channel, SUM(spend) FROM campaign_spend GROUP BY 1 ORDER BY 2 DESC;
 ## Project Structure
 
 ```
-fake-company-data-generator/
+shopsphere-data-generator/
 ├── generate.py              # Entry point
 ├── load_postgres.py         # PostgreSQL loader
 ├── requirements.txt
