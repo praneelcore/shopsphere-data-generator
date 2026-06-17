@@ -13,6 +13,7 @@ import pandas as pd
 
 from config.settings import (
     FUNNEL_CONVERSION, DEVICE_TYPES, TRAFFIC_SOURCES,
+    UTM_SOURCES, UTM_MEDIUMS, PAGE_URLS,
     START_DATE, END_DATE, SEASONALITY,
 )
 from src.utils import get_logger, make_uuids, random_dates_array, seasonal_weights, weighted_choice
@@ -28,6 +29,39 @@ REACH_PROBS = [
     FUNNEL_CONVERSION["checkout"],
     FUNNEL_CONVERSION["purchase"],
 ]
+
+# Map event types to realistic page URLs
+EVENT_PAGE_MAP = {
+    "page_view": ["/", "/products", "/deals", "/about", "/help"],
+    "product_view": ["/product/detail"],
+    "add_to_cart": ["/product/detail", "/cart"],
+    "checkout": ["/checkout", "/checkout/payment"],
+    "purchase": ["/checkout/payment"],
+    "search": ["/search", "/products"],
+}
+
+
+def _assign_utm_campaign(sources: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Assign utm_campaign values correlated with traffic source."""
+    n = len(sources)
+    campaigns = np.empty(n, dtype=object)
+
+    campaign_map = {
+        "Google Ads": ["search_brand_q1", "shopping_catalog", "performance_max", "remarketing_all", "competitor_terms"],
+        "Facebook Ads": ["awareness_broad", "retargeting_site", "lookalike_ltv", "video_engagement", "dynamic_products"],
+        "LinkedIn Ads": ["b2b_outreach", "lead_gen_form", "sponsored_content", "inmail_blast", "brand_lift"],
+        "Email": ["welcome_series", "cart_abandonment", "win_back", "vip_loyalty", "newsletter_weekly"],
+        "Organic Search": [None],  # No campaign for organic
+        "Direct": [None],  # No campaign for direct
+    }
+
+    for source_name, campaign_list in campaign_map.items():
+        mask = sources == source_name
+        count = mask.sum()
+        if count > 0:
+            campaigns[mask] = rng.choice(campaign_list, size=count)
+
+    return campaigns
 
 
 def generate_website_events(
@@ -65,6 +99,37 @@ def generate_website_events(
     sources = weighted_choice(rng, TRAFFIC_SOURCES, n_sessions)
     s_ids   = make_uuids(n_sessions)
 
+    # ── UTM parameters (session-level) ────────────────────────────────────────
+    utm_sources = weighted_choice(rng, UTM_SOURCES, n_sessions)
+    utm_mediums = weighted_choice(rng, UTM_MEDIUMS, n_sessions)
+    utm_campaigns = _assign_utm_campaign(sources, rng)
+
+    # Align utm_source with traffic_source for consistency
+    source_to_utm = {
+        "Google Ads": "google",
+        "Facebook Ads": "facebook",
+        "LinkedIn Ads": "linkedin",
+        "Email": "email",
+        "Direct": "direct",
+        "Organic Search": "organic",
+    }
+    for ts_name, utm_name in source_to_utm.items():
+        mask = sources == ts_name
+        utm_sources[mask] = utm_name
+
+    # Align utm_medium with traffic_source
+    medium_map = {
+        "Google Ads": "cpc",
+        "Facebook Ads": "social",
+        "LinkedIn Ads": "cpc",
+        "Email": "email",
+        "Direct": "none",
+        "Organic Search": "organic",
+    }
+    for ts_name, med_name in medium_map.items():
+        mask = sources == ts_name
+        utm_mediums[mask] = med_name
+
     # ── Build funnel events vectorised ────────────────────────────────────────
     chunks: list[pd.DataFrame] = []
 
@@ -88,6 +153,10 @@ def generate_website_events(
 
         ts = base_ts[mask] + offsets[mask, step_idx]
 
+        # Assign page_url based on event type
+        page_options = EVENT_PAGE_MAP.get(step_name, ["/"])
+        page_urls = rng.choice(page_options, size=n)
+
         chunks.append(pd.DataFrame({
             "session_id":      s_ids[mask],
             "customer_id":     session_customers[mask],
@@ -95,6 +164,10 @@ def generate_website_events(
             "event_type":      step_name,
             "device_type":     devices[mask],
             "traffic_source":  sources[mask],
+            "page_url":        page_urls,
+            "utm_source":      utm_sources[mask],
+            "utm_medium":      utm_mediums[mask],
+            "utm_campaign":    utm_campaigns[mask],
         }))
 
     # ── Extra page_view / search events per session ───────────────────────────
@@ -106,6 +179,15 @@ def generate_website_events(
         extra_ts = base_ts[rep_idx] + rng.integers(5, 600, total_extra).astype("timedelta64[s]")
         extra_types = rng.choice(["page_view", "search"], size=total_extra, p=[0.6, 0.4])
 
+        # Assign page_url for extra events
+        extra_pages = np.empty(total_extra, dtype=object)
+        for evt_type in ["page_view", "search"]:
+            evt_mask = extra_types == evt_type
+            count = evt_mask.sum()
+            if count > 0:
+                page_options = EVENT_PAGE_MAP.get(evt_type, ["/"])
+                extra_pages[evt_mask] = rng.choice(page_options, size=count)
+
         chunks.append(pd.DataFrame({
             "session_id":      s_ids[rep_idx],
             "customer_id":     session_customers[rep_idx],
@@ -113,6 +195,10 @@ def generate_website_events(
             "event_type":      extra_types,
             "device_type":     devices[rep_idx],
             "traffic_source":  sources[rep_idx],
+            "page_url":        extra_pages,
+            "utm_source":      utm_sources[rep_idx],
+            "utm_medium":      utm_mediums[rep_idx],
+            "utm_campaign":    utm_campaigns[rep_idx],
         }))
 
     # ── Combine & trim ────────────────────────────────────────────────────────
@@ -125,9 +211,12 @@ def generate_website_events(
     # Replace empty string back to None for customer_id
     df["customer_id"] = df["customer_id"].replace("", None)
 
+    # Replace None string in utm_campaign with actual None
+    df["utm_campaign"] = df["utm_campaign"].where(df["utm_campaign"].notna() & (df["utm_campaign"] != "None"), None)
+
     if dirty:
         from src.utils import inject_nulls
-        df = inject_nulls(rng, df, ["customer_id", "traffic_source"], rate=0.03)
+        df = inject_nulls(rng, df, ["customer_id", "traffic_source", "utm_source", "utm_medium", "utm_campaign"], rate=0.03)
 
     logger.info(
         f"  ↳ website_events done. {len(df):,} events. "

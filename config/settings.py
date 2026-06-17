@@ -127,6 +127,46 @@ FUNNEL_CONVERSION = {
 DEVICE_TYPES    = {"Mobile": 0.55, "Desktop": 0.35, "Tablet": 0.10}
 TRAFFIC_SOURCES = {"Google Ads": 0.28, "Organic Search": 0.22, "Facebook Ads": 0.18, "Direct": 0.14, "Email": 0.12, "LinkedIn Ads": 0.06}
 
+# ─── UTM parameters for website events ───────────────────────────────────────
+UTM_SOURCES = {
+    "google": 0.28,
+    "facebook": 0.18,
+    "linkedin": 0.06,
+    "email": 0.12,
+    "direct": 0.14,
+    "organic": 0.22,
+}
+
+UTM_MEDIUMS = {
+    "cpc": 0.35,
+    "organic": 0.22,
+    "email": 0.12,
+    "social": 0.18,
+    "referral": 0.08,
+    "none": 0.05,
+}
+
+# Page URLs for website events (weighted by typical traffic distribution)
+PAGE_URLS = {
+    "/": 0.15,
+    "/products": 0.12,
+    "/products/category/electronics": 0.06,
+    "/products/category/fashion": 0.07,
+    "/products/category/home": 0.05,
+    "/products/category/beauty": 0.04,
+    "/products/category/sports": 0.03,
+    "/products/category/books": 0.02,
+    "/product/detail": 0.14,
+    "/cart": 0.10,
+    "/checkout": 0.06,
+    "/checkout/payment": 0.04,
+    "/account": 0.03,
+    "/search": 0.05,
+    "/deals": 0.02,
+    "/about": 0.01,
+    "/help": 0.01,
+}
+
 # ─── Support tickets ─────────────────────────────────────────────────────────
 ISSUE_TYPES  = {"Delivery": 0.30, "Refund": 0.25, "Product Defect": 0.20, "Payment": 0.15, "Account": 0.10}
 PRIORITIES   = {"Low": 0.50, "Medium": 0.35, "High": 0.15}
@@ -143,6 +183,7 @@ CAMPAIGN_CHANNELS = {
 
 # ─── Subscription plans ───────────────────────────────────────────────────────
 SUBSCRIPTION_PLANS = {"Basic": 0.50, "Premium": 0.35, "Enterprise": 0.15}
+SUBSCRIPTION_PRICING = {"Basic": 9.99, "Premium": 29.99, "Enterprise": 99.99}
 CHURN_RATE_BASE   = 0.05
 
 # ─── Data quality flags ───────────────────────────────────────────────────────
