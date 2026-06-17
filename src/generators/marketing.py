@@ -43,10 +43,14 @@ def generate_marketing_campaigns(
         except ValueError:
             end = date(year, 12, 28)
 
+        # Generate a slug-style utm_campaign from name + channel + quarter
+        utm_campaign = f"{name_base.lower().replace(' ', '_')}_{year}_q{quarter}"
+
         rows.append({
             "campaign_id":   str(make_uuids(1)[0]),
             "campaign_name": f"{name_base} – {channel} {year} Q{quarter}",
             "channel":       channel,
+            "utm_campaign":  utm_campaign,
             "start_date":    start,
             "end_date":      end,
         })

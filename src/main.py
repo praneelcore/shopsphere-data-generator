@@ -29,6 +29,7 @@ from src.generators.website_events import generate_website_events
 from src.generators.support_tickets import generate_support_tickets
 from src.generators.marketing     import generate_marketing_campaigns, generate_campaign_spend
 from src.generators.subscriptions import generate_subscriptions
+from src.generators.dim_date      import generate_dim_date
 
 logger = get_logger("shopsphere")
 
@@ -107,6 +108,10 @@ def cli(customers: int, orders: int, events: int, products: int,
     df_subs = generate_subscriptions(df_customers, df_tickets, rng, dirty=dirty)
     save_parquet(df_subs, out_dir / "subscriptions.parquet", logger)
 
+    # ── 12. Date Dimension ────────────────────────────────────────────────────
+    df_dim_date = generate_dim_date()
+    save_parquet(df_dim_date, out_dir / "dim_date.parquet", logger)
+
     # ── Summary ───────────────────────────────────────────────────────────────
     elapsed = time.time() - t0
     logger.info("")
@@ -126,6 +131,7 @@ def cli(customers: int, orders: int, events: int, products: int,
         "marketing_campaigns":df_campaigns,
         "campaign_spend":     df_spend,
         "subscriptions":      df_subs,
+        "dim_date":           df_dim_date,
     }
     total_rows = 0
     for name, df in datasets.items():

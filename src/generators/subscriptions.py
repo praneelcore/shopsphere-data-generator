@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from datetime import timedelta
 
-from config.settings import SUBSCRIPTION_PLANS, CHURN_RATE_BASE, START_DATE, END_DATE
+from config.settings import SUBSCRIPTION_PLANS, SUBSCRIPTION_PRICING, CHURN_RATE_BASE, START_DATE, END_DATE
 from src.utils import get_logger, make_uuids, random_dates_array, weighted_choice
 
 logger = get_logger(__name__)
@@ -79,6 +79,7 @@ def generate_subscriptions(
         "subscription_id": make_uuids(n),
         "customer_id":     subscribers["customer_id"].values,
         "plan_type":       plans,
+        "monthly_price":   [SUBSCRIPTION_PRICING[p] for p in plans],
         "start_date":      pd.to_datetime(start_dates).to_series().dt.date.values,
         "end_date":        end_dates_final,
         "churn_status":    is_churned,
