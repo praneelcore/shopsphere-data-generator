@@ -71,3 +71,45 @@ def generate_support_tickets(
 
     logger.info(f"  ↳ support_tickets done. {len(df):,} rows.")
     return df
+
+
+def generate_support_tickets_batch(
+    customers: pd.DataFrame,
+    n_tickets: int,
+    target_date,
+    rng: np.random.Generator,
+    dirty: bool = False,
+) -> pd.DataFrame:
+    """Generate support tickets for a single day (batch mode)."""
+    logger.info(f"Generating {n_tickets} support tickets for {target_date} …")
+
+    # Sample from all customers (weighted toward inactive ones)
+    is_inactive = ~customers["is_active"].values
+    weights = np.where(is_inactive, 3.0, 1.0)
+    weights /= weights.sum()
+
+    cust_idx = rng.choice(len(customers), size=n_tickets, replace=True, p=weights)
+    cust_ids = customers["customer_id"].values[cust_idx]
+
+    issue_types = weighted_choice(rng, ISSUE_TYPES, n_tickets)
+    priorities  = weighted_choice(rng, PRIORITIES, n_tickets)
+    res_hours   = np.array([
+        round(rng.uniform(*RESOLUTION_HOURS[p]), 1)
+        for p in priorities
+    ])
+
+    df = pd.DataFrame({
+        "ticket_id":             make_uuids(n_tickets),
+        "customer_id":           cust_ids,
+        "created_date":          target_date,
+        "issue_type":            issue_types,
+        "priority":              priorities,
+        "resolution_time_hours": res_hours,
+    })
+
+    if dirty:
+        from src.utils import inject_nulls
+        df = inject_nulls(rng, df, ["resolution_time_hours"], rate=0.05, table_name="support_tickets")
+
+    logger.info(f"  ↳ batch support_tickets done. {len(df)} rows.")
+    return df

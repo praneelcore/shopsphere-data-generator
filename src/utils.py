@@ -75,23 +75,124 @@ def save_parquet(df: pd.DataFrame, path: Path, logger: logging.Logger) -> None:
 
 # ─── Data-quality corruption helpers ─────────────────────────────────────────
 
-def inject_nulls(rng: np.random.Generator, df: pd.DataFrame, columns: list[str], rate: float) -> pd.DataFrame:
+class DirtyManifest:
+    """Tracks all injected data quality issues for validation."""
+
+    def __init__(self):
+        self.issues: list[dict] = []
+
+    def record(self, table: str, issue: str, column: str = None,
+               row_ids: list = None, count: int = 0):
+        entry = {"table": table, "issue": issue, "count": count}
+        if column:
+            entry["column"] = column
+        if row_ids:
+            entry["row_ids"] = row_ids[:50]  # Cap stored IDs
+        self.issues.append(entry)
+
+    def save(self, path):
+        import json
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({"total_issues": len(self.issues), "issues": self.issues}, f, indent=2, default=str)
+
+
+# Global manifest instance (reset per run)
+dirty_manifest = DirtyManifest()
+
+
+def inject_nulls(rng: np.random.Generator, df: pd.DataFrame, columns: list[str],
+                 rate: float, table_name: str = None) -> pd.DataFrame:
     df = df.copy()
     for col in columns:
         mask = rng.random(len(df)) < rate
-        df.loc[mask, col] = None
+        count = mask.sum()
+        if count > 0:
+            df.loc[mask, col] = None
+            if table_name:
+                id_col = df.columns[0]
+                dirty_manifest.record(table_name, "null_value", column=col,
+                                      row_ids=df.loc[mask, id_col].tolist(), count=int(count))
     return df
 
 
-def inject_duplicates(rng: np.random.Generator, df: pd.DataFrame, rate: float) -> pd.DataFrame:
+def inject_duplicates(rng: np.random.Generator, df: pd.DataFrame, rate: float,
+                      table_name: str = None) -> pd.DataFrame:
     n_dupes = max(1, int(len(df) * rate))
     idx     = rng.choice(len(df), size=n_dupes, replace=False)
     dupes   = df.iloc[idx].copy()
+    if table_name:
+        id_col = df.columns[0]
+        dirty_manifest.record(table_name, "duplicate_rows",
+                              row_ids=dupes[id_col].tolist(), count=n_dupes)
     return pd.concat([df, dupes], ignore_index=True)
 
 
-def inject_invalid_dates(rng: np.random.Generator, df: pd.DataFrame, col: str, rate: float) -> pd.DataFrame:
+def inject_invalid_dates(rng: np.random.Generator, df: pd.DataFrame, col: str,
+                         rate: float, table_name: str = None) -> pd.DataFrame:
     df     = df.copy()
     mask   = rng.random(len(df)) < rate
-    df.loc[mask, col] = "9999-99-99"   # clearly invalid
+    count  = mask.sum()
+    if count > 0:
+        invalid_values = rng.choice(["9999-99-99", "not-a-date", "2024-13-45", ""], size=count)
+        df.loc[mask, col] = invalid_values
+        if table_name:
+            id_col = df.columns[0]
+            dirty_manifest.record(table_name, "invalid_date", column=col,
+                                  row_ids=df.loc[mask, id_col].tolist(), count=int(count))
+    return df
+
+
+def inject_broken_fks(rng: np.random.Generator, df: pd.DataFrame, fk_col: str,
+                      rate: float, table_name: str = None) -> pd.DataFrame:
+    """Replace FK values with non-existent UUIDs."""
+    df   = df.copy()
+    mask = rng.random(len(df)) < rate
+    count = mask.sum()
+    if count > 0:
+        fake_ids = make_uuids(count)
+        df.loc[mask, fk_col] = fake_ids
+        if table_name:
+            id_col = df.columns[0]
+            dirty_manifest.record(table_name, "broken_foreign_key", column=fk_col,
+                                  row_ids=df.loc[mask, id_col].tolist(), count=int(count))
+    return df
+
+
+def inject_future_timestamps(rng: np.random.Generator, df: pd.DataFrame, col: str,
+                             rate: float, table_name: str = None) -> pd.DataFrame:
+    """Inject timestamps in the future."""
+    df   = df.copy()
+    mask = rng.random(len(df)) < rate
+    count = mask.sum()
+    if count > 0:
+        # Match the resolution of the existing column
+        future_offset = pd.to_timedelta(rng.integers(1, 365, size=count), unit="D")
+        future_ts = pd.Timestamp.now() + future_offset
+        # Convert to match the existing dtype
+        col_dtype = df[col].dtype
+        if hasattr(col_dtype, 'unit'):
+            future_ts = future_ts.as_unit(col_dtype.unit)
+        df[col] = df[col].astype(object)
+        df.loc[mask, col] = future_ts.values
+        df[col] = pd.to_datetime(df[col])
+        if table_name:
+            id_col = df.columns[0]
+            dirty_manifest.record(table_name, "future_timestamp", column=col,
+                                  row_ids=df.loc[mask, id_col].tolist(), count=int(count))
+    return df
+
+
+def inject_negative_amounts(rng: np.random.Generator, df: pd.DataFrame, col: str,
+                            rate: float, table_name: str = None) -> pd.DataFrame:
+    """Make some numeric values negative."""
+    df   = df.copy()
+    mask = rng.random(len(df)) < rate
+    count = mask.sum()
+    if count > 0:
+        df.loc[mask, col] = -abs(df.loc[mask, col])
+        if table_name:
+            id_col = df.columns[0]
+            dirty_manifest.record(table_name, "negative_amount", column=col,
+                                  row_ids=df.loc[mask, id_col].tolist(), count=int(count))
     return df

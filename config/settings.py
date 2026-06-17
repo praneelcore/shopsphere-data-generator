@@ -9,11 +9,28 @@ from datetime import date
 START_DATE = date(2023, 1, 1)
 END_DATE   = date.today()
 
+# ─── Scale presets ────────────────────────────────────────────────────────────
+SCALE_PRESETS = {
+    "dev":     {"customers": 1_000,   "orders": 10_000,    "events": 50_000,    "products": 100},
+    "staging": {"customers": 10_000,  "orders": 100_000,   "events": 500_000,   "products": 1_000},
+    "prod":    {"customers": 100_000, "orders": 1_000_000, "events": 5_000_000, "products": 5_000},
+}
+
 # ─── Scale (overridable via CLI) ──────────────────────────────────────────────
 DEFAULT_CUSTOMERS   = 100_000
 DEFAULT_ORDERS      = 1_000_000
 DEFAULT_EVENTS      = 5_000_000
 DEFAULT_SEED        = 42
+
+# ─── Batch mode daily volumes (baseline, scaled by seasonality) ───────────────
+BATCH_DAILY_VOLUMES = {
+    "orders":          800,
+    "customers":       75,
+    "website_events":  14_000,
+    "support_tickets": 50,
+    "subscriptions_new": 30,
+    "subscriptions_churn": 6,
+}
 
 # ─── Geography ────────────────────────────────────────────────────────────────
 COUNTRIES = {
@@ -183,14 +200,27 @@ CAMPAIGN_CHANNELS = {
 
 # ─── Subscription plans ───────────────────────────────────────────────────────
 SUBSCRIPTION_PLANS = {"Basic": 0.50, "Premium": 0.35, "Enterprise": 0.15}
-SUBSCRIPTION_PRICING = {"Basic": 9.99, "Premium": 29.99, "Enterprise": 99.99}
-CHURN_RATE_BASE   = 0.05
+SUBSCRIPTION_PRICING = {
+    "Basic":      {"monthly": 9.99,  "annual_monthly": 7.99},
+    "Premium":    {"monthly": 29.99, "annual_monthly": 23.99},
+    "Enterprise": {"monthly": 99.99, "annual_monthly": 79.99},
+}
+BILLING_CYCLE_DIST = {"monthly": 0.60, "annual": 0.40}
+ANNUAL_DISCOUNT    = 0.20  # 20% off for annual billing
+CHURN_RATE_BASE    = 0.05
 
 # ─── Data quality flags ───────────────────────────────────────────────────────
-DQ_DUPLICATE_RATE    = 0.02
-DQ_NULL_RATE         = 0.03
-DQ_INVALID_DATE_RATE = 0.01
-DQ_BROKEN_FK_RATE    = 0.005
+DQ_DUPLICATE_RATE       = 0.02
+DQ_NULL_RATE            = 0.03
+DQ_INVALID_DATE_RATE    = 0.01
+DQ_BROKEN_FK_RATE       = 0.005
+DQ_FUTURE_TIMESTAMP_RATE = 0.002
+DQ_NEGATIVE_AMOUNT_RATE = 0.001
+DQ_LATE_ARRIVAL_RATE    = 0.01
+
+# ─── dim_date range (extended for warehouse use) ──────────────────────────────
+DIM_DATE_START = date(2022, 1, 1)
+DIM_DATE_END   = date(2027, 12, 31)
 
 # ─── Output ───────────────────────────────────────────────────────────────────
 OUTPUT_DIR = "data"

@@ -41,25 +41,49 @@ EVENT_PAGE_MAP = {
 }
 
 
-def _assign_utm_campaign(sources: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """Assign utm_campaign values correlated with traffic source."""
+def _assign_utm_campaign(sources: np.ndarray, rng: np.random.Generator, campaigns_df=None) -> np.ndarray:
+    """Assign utm_campaign values from actual marketing_campaigns when available."""
     n = len(sources)
     campaigns = np.empty(n, dtype=object)
 
-    campaign_map = {
-        "Google Ads": ["search_brand_q1", "shopping_catalog", "performance_max", "remarketing_all", "competitor_terms"],
-        "Facebook Ads": ["awareness_broad", "retargeting_site", "lookalike_ltv", "video_engagement", "dynamic_products"],
-        "LinkedIn Ads": ["b2b_outreach", "lead_gen_form", "sponsored_content", "inmail_blast", "brand_lift"],
-        "Email": ["welcome_series", "cart_abandonment", "win_back", "vip_loyalty", "newsletter_weekly"],
-        "Organic Search": [None],  # No campaign for organic
-        "Direct": [None],  # No campaign for direct
-    }
+    if campaigns_df is not None and "utm_campaign" in campaigns_df.columns:
+        # Use actual campaign utm values grouped by channel
+        for channel_name in campaigns_df["channel"].unique():
+            channel_campaigns = campaigns_df[campaigns_df["channel"] == channel_name]["utm_campaign"].values
+            # Map channel names to traffic source names
+            channel_to_source = {
+                "Google Ads": "Google Ads",
+                "Facebook Ads": "Facebook Ads",
+                "LinkedIn Ads": "LinkedIn Ads",
+                "Email": "Email",
+                "Organic Search": "Organic Search",
+            }
+            source_name = channel_to_source.get(channel_name)
+            if source_name and len(channel_campaigns) > 0:
+                mask = sources == source_name
+                count = mask.sum()
+                if count > 0:
+                    campaigns[mask] = rng.choice(channel_campaigns, size=count)
 
-    for source_name, campaign_list in campaign_map.items():
-        mask = sources == source_name
-        count = mask.sum()
-        if count > 0:
-            campaigns[mask] = rng.choice(campaign_list, size=count)
+        # Direct traffic gets no campaign
+        direct_mask = sources == "Direct"
+        campaigns[direct_mask] = None
+    else:
+        # Fallback: generate generic campaign names
+        campaign_map = {
+            "Google Ads": ["search_brand", "shopping_catalog", "performance_max", "remarketing_all", "competitor_terms"],
+            "Facebook Ads": ["awareness_broad", "retargeting_site", "lookalike_ltv", "video_engagement", "dynamic_products"],
+            "LinkedIn Ads": ["b2b_outreach", "lead_gen_form", "sponsored_content", "inmail_blast", "brand_lift"],
+            "Email": ["welcome_series", "cart_abandonment", "win_back", "vip_loyalty", "newsletter_weekly"],
+            "Organic Search": [None],
+            "Direct": [None],
+        }
+
+        for source_name, campaign_list in campaign_map.items():
+            mask = sources == source_name
+            count = mask.sum()
+            if count > 0:
+                campaigns[mask] = rng.choice(campaign_list, size=count)
 
     return campaigns
 
@@ -68,6 +92,7 @@ def generate_website_events(
     customers: pd.DataFrame,
     target_events: int,
     rng: np.random.Generator,
+    campaigns: pd.DataFrame = None,
     dirty: bool = False,
 ) -> pd.DataFrame:
     logger.info(f"Generating ≈{target_events:,} website events (vectorised) …")
@@ -102,7 +127,7 @@ def generate_website_events(
     # ── UTM parameters (session-level) ────────────────────────────────────────
     utm_sources = weighted_choice(rng, UTM_SOURCES, n_sessions)
     utm_mediums = weighted_choice(rng, UTM_MEDIUMS, n_sessions)
-    utm_campaigns = _assign_utm_campaign(sources, rng)
+    utm_campaigns = _assign_utm_campaign(sources, rng, campaigns_df=campaigns)
 
     # Align utm_source with traffic_source for consistency
     source_to_utm = {

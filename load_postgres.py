@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, text
 
 # ── Table load order respects FK constraints ──────────────────────────────────
 TABLE_ORDER = [
+    "dim_date",
     "customers",
     "products",
     "marketing_campaigns",
@@ -28,6 +29,7 @@ TABLE_ORDER = [
     "support_tickets",
     "campaign_spend",
     "subscriptions",
+    "product_reviews",
 ]
 
 # ── Explicit dtypes for PostgreSQL type mapping ───────────────────────────────
@@ -58,7 +60,29 @@ DTYPE_OVERRIDES: dict[str, dict] = {
         "conversions": "integer",
     },
     "subscriptions": {
-        "churn_status": "boolean",
+        "churn_status":    "boolean",
+        "monthly_price":   "numeric(6,2)",
+        "annual_discount": "numeric(4,2)",
+    },
+    "product_reviews": {
+        "rating": "integer",
+    },
+    "dim_date": {
+        "date_key":        "integer",
+        "year":            "integer",
+        "quarter":         "integer",
+        "month":           "integer",
+        "week_of_year":    "integer",
+        "day_of_month":    "integer",
+        "day_of_week":     "integer",
+        "is_weekend":      "boolean",
+        "iso_year":        "integer",
+        "iso_week":        "integer",
+        "fiscal_year":     "integer",
+        "fiscal_quarter":  "integer",
+        "is_month_start":  "boolean",
+        "is_month_end":    "boolean",
+        "is_holiday":      "boolean",
     },
 }
 

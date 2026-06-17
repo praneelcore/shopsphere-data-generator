@@ -106,7 +106,7 @@ def generate_refunds(
     reasons = rng.choice(REFUND_REASONS, size=len(refund_order_ids))
 
     # ── Dates: refunds happen 1-21 days after order date ─────────────────────
-    order_date_map = orders.set_index("order_id")["order_date"]
+    order_date_map = orders.drop_duplicates("order_id").set_index("order_id")["order_date"]
     order_dates_ref = pd.to_datetime([order_date_map.get(oid, orders["order_date"].iloc[0]) for oid in refund_order_ids])
     delay = rng.integers(1, 22, size=len(refund_order_ids))
     refund_dates_arr = (order_dates_ref + pd.to_timedelta(delay, unit="D"))

@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 from datetime import timedelta
 
-from config.settings import SUBSCRIPTION_PLANS, SUBSCRIPTION_PRICING, CHURN_RATE_BASE, START_DATE, END_DATE
+from config.settings import (
+    SUBSCRIPTION_PLANS, SUBSCRIPTION_PRICING, BILLING_CYCLE_DIST,
+    CHURN_RATE_BASE, START_DATE, END_DATE,
+)
 from src.utils import get_logger, make_uuids, random_dates_array, weighted_choice
 
 logger = get_logger(__name__)
@@ -75,11 +78,26 @@ def generate_subscriptions(
             ts = pd.Timestamp(ed)
             end_dates_final.append(min(ts, pd.Timestamp(END_DATE)).date())
 
+    # ── Billing cycle ───────────────────────────────────────────────────────
+    billing_cycles = weighted_choice(rng, BILLING_CYCLE_DIST, n)
+
+    # ── Monthly price based on plan + billing cycle ──────────────────────────
+    monthly_prices = np.array([
+        SUBSCRIPTION_PRICING[p]["annual_monthly"] if bc == "annual"
+        else SUBSCRIPTION_PRICING[p]["monthly"]
+        for p, bc in zip(plans, billing_cycles)
+    ])
+
+    # ── Annual discount (0.20 for annual, 0.0 for monthly) ──────────────────
+    annual_discounts = np.where(billing_cycles == "annual", 0.20, 0.00)
+
     df = pd.DataFrame({
         "subscription_id": make_uuids(n),
         "customer_id":     subscribers["customer_id"].values,
         "plan_type":       plans,
-        "monthly_price":   [SUBSCRIPTION_PRICING[p] for p in plans],
+        "monthly_price":   monthly_prices,
+        "billing_cycle":   billing_cycles,
+        "annual_discount": annual_discounts,
         "start_date":      pd.to_datetime(start_dates).to_series().dt.date.values,
         "end_date":        end_dates_final,
         "churn_status":    is_churned,
