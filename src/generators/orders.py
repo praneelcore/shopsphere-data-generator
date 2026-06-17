@@ -83,9 +83,8 @@ def generate_orders(
     })
 
     if dirty:
-        from src.utils import inject_nulls, inject_duplicates, inject_invalid_dates
+        from src.utils import inject_nulls, inject_duplicates
         df = inject_duplicates(rng, df, rate=0.01)
-        df = inject_invalid_dates(rng, df, "order_date", rate=0.005)
 
     logger.info(f"  ↳ orders done. Status dist: { df['status'].value_counts().to_dict() }")
     return df
@@ -136,4 +135,48 @@ def generate_order_items(
         df = inject_nulls(rng, df, ["quantity"], rate=0.01)
 
     logger.info(f"  ↳ order_items done. {total_items:,} line items. Avg basket: {basket_sizes.mean():.2f}")
+    return df
+
+
+def generate_orders_batch(
+    customers: pd.DataFrame,
+    n_orders: int,
+    target_date,
+    rng: np.random.Generator,
+    dirty: bool = False,
+) -> pd.DataFrame:
+    """Generate orders for a single day (batch mode)."""
+    logger.info(f"Generating {n_orders} orders for {target_date} …")
+
+    # Weight toward active customers and higher segments
+    active_mask = customers["is_active"].values
+    active_customers = customers[active_mask]
+
+    if len(active_customers) == 0:
+        active_customers = customers
+
+    # Sample customers weighted by segment
+    seg_weights = active_customers["customer_segment"].map({
+        "Whale": 12.0, "Loyal": 5.0, "Regular": 2.0, "One-Time Buyer": 0.3,
+    }).values.astype(float)
+    seg_weights /= seg_weights.sum()
+
+    customer_idx = rng.choice(len(active_customers), size=n_orders, replace=True, p=seg_weights)
+    customer_ids = active_customers["customer_id"].values[customer_idx]
+
+    statuses = weighted_choice(rng, ORDER_STATUSES, n_orders)
+
+    df = pd.DataFrame({
+        "order_id":    make_uuids(n_orders),
+        "customer_id": customer_ids,
+        "order_date":  target_date,
+        "status":      statuses,
+    })
+
+    if dirty:
+        from src.utils import inject_nulls, inject_duplicates
+        df = inject_duplicates(rng, df, rate=0.01, table_name="orders")
+        df = inject_nulls(rng, df, ["status"], rate=0.03, table_name="orders")
+
+    logger.info(f"  ↳ batch orders done. {len(df)} rows.")
     return df

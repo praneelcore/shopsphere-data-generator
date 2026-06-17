@@ -111,3 +111,63 @@ def generate_campaign_spend(
     df = pd.DataFrame(rows)
     logger.info(f"  ↳ campaign_spend done. {len(df):,} rows. Total spend: ${df['spend'].sum():,.2f}")
     return df
+
+
+def generate_campaign_spend_daily(
+    campaigns: pd.DataFrame,
+    target_date,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
+    """Generate one day's campaign spend for all active campaigns (batch mode)."""
+    from config.settings import SEASONALITY
+    logger.info(f"Generating campaign_spend for {target_date} …")
+
+    month = target_date.month
+    mult  = SEASONALITY.get(month, 1.0)
+
+    # Filter to active campaigns on this date
+    active = campaigns[
+        (pd.to_datetime(campaigns["start_date"]) <= pd.Timestamp(target_date)) &
+        (pd.to_datetime(campaigns["end_date"]) >= pd.Timestamp(target_date))
+    ]
+
+    if len(active) == 0:
+        logger.info("  ↳ No active campaigns for this date")
+        return pd.DataFrame(columns=["campaign_spend_id", "campaign_id", "date",
+                                     "impressions", "clicks", "conversions", "spend"])
+
+    rows = []
+    for _, camp in active.iterrows():
+        cfg   = CAMPAIGN_CHANNELS[camp["channel"]]
+        ctr   = cfg["conversion_rate"]
+        cpm   = cfg["cpm"]
+
+        daily_budget = rng.uniform(200, 5000)
+        if camp["channel"] == "LinkedIn Ads":
+            daily_budget = rng.uniform(500, 3000)
+        elif camp["channel"] == "Organic Search":
+            daily_budget = rng.uniform(0, 50)
+
+        spend = round(daily_budget * mult * rng.uniform(0.85, 1.15), 2)
+
+        if cpm > 0:
+            impressions = int(spend / cpm * 1000 * rng.uniform(0.9, 1.1))
+        else:
+            impressions = int(rng.uniform(5000, 50000) * mult)
+
+        clicks      = int(impressions * rng.uniform(0.01, 0.05))
+        conversions = int(clicks * ctr * rng.uniform(0.85, 1.15))
+
+        rows.append({
+            "campaign_spend_id": str(make_uuids(1)[0]),
+            "campaign_id":       camp["campaign_id"],
+            "date":              target_date,
+            "impressions":       impressions,
+            "clicks":            clicks,
+            "conversions":       conversions,
+            "spend":             spend,
+        })
+
+    df = pd.DataFrame(rows)
+    logger.info(f"  ↳ batch campaign_spend done. {len(df)} rows.")
+    return df
